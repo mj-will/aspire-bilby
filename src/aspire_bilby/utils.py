@@ -11,6 +11,7 @@ import importlib
 import os
 import numpy as np
 import pandas as pd
+import re
 
 from bilby.core.utils.log import logger
 
@@ -234,7 +235,8 @@ def sample_missing_parameters(
         If not specified, the parameters will be inferred from the priors.
     parameters_to_sample : list[str]
         A list of parameters to explicitly sample from the prior rather reading
-        from the result.
+        from the result. Each entry can be a regex pattern to match multiple
+        parameters.
 
     Returns
     -------
@@ -251,15 +253,20 @@ def sample_missing_parameters(
     )
     if parameters_to_sample is not None:
         logger.debug(f"Ignoring existing samples for: {parameters_to_sample}")
-        for parameter in parameters_to_sample:
-            # Remove the parameter from parameter lists if present
-            # This ensures that the parameter is sampled from the prior
-            if parameter in initial_parameters:
-                initial_parameters.remove(parameter)
-            if parameter in all_parameters:
-                all_parameters.remove(parameter)
-            else:
-                logger.debug(f"{parameter} not in the initial result.")
+        for pattern in parameters_to_sample:
+            # Use regex to match parameter names
+            regex = re.compile(pattern)
+            for p in all_parameters:
+                if regex.match(p):
+                    logger.debug(f"Found matching parameter: {p}")
+                    # Remove the parameter from parameter lists if present
+                    # This ensures that the parameter is sampled from the prior
+                    if p in initial_parameters:
+                        initial_parameters.remove(p)
+                    if p in all_parameters:
+                        all_parameters.remove(p)
+                else:
+                    logger.debug(f"{p} not in the initial result.")
 
     missing_parameters = list(set(parameters) - set(all_parameters))
     common_parameters = list(set(parameters) & set(all_parameters))
