@@ -2,6 +2,7 @@
 
 from functools import partial
 from typing import Callable
+import contextlib
 
 import bilby
 from bilby.core.utils.random import rng
@@ -10,7 +11,7 @@ from bilby.core.sampler.base_sampler import Sampler
 import copy
 import os
 import numpy as np
-import aspire
+from aspire import Aspire as AspireSampler
 from aspire.samples import Samples
 from aspire.utils import configure_logger, PoolHandler
 
@@ -41,7 +42,17 @@ class Aspire(Sampler):
     prior regardless of whether they are in the initial result file.
 
 
-    It also includes a method to read initial samples from a bilby result
+    It also includes a method to read initial samples from a bilby result.
+
+    Aspire also supports checkpointing and resuming via the built-in
+    checkpointing functionality. If :code:`enable_checkpointing` is set to
+    :code:`True` (default), a checkpoint file will be created in the output
+    directory with the name :code:`{label}_aspire_checkpoint.h5`. If you
+    provide a custom checkpoint file via the :code:`checkpoint_file` keyword
+    argument in :code:`sample_kwargs`, that file will be used instead. The
+    checkpoint file is updated every :code:`checkpoint_every` iterations
+    (default 1). If the checkpoint file already exists, Aspire will resume
+    from the last checkpoint.
     """
 
     sampler_name = "aspire"
@@ -60,6 +71,7 @@ class Aspire(Sampler):
         return dict(
             n_samples=1000,
             initial_result_file=None,
+            enable_checkpointing=True,
             flow_matching=False,
             npool=None,
         )
@@ -191,48 +203,72 @@ class Aspire(Sampler):
         kwargs.pop("npool", None)
         kwargs.pop("pool", None)
         kwargs.pop("sampling_seed", None)
-
-        logger.info(f"Creating aspire instance with kwargs: {kwargs}")
-        pop = aspire.Aspire(
-            log_likelihood=log_likelihood_fn,
-            log_prior=funcs.log_prior,
-            dims=self.ndim,
-            parameters=self.search_parameter_keys,
-            prior_bounds=prior_bounds,
-            periodic_parameters=periodic_parameters,
-            **kwargs,
+        enable_checkpointing = kwargs.pop("enable_checkpointing", True)
+        default_checkpoint_file = os.path.join(
+            self.outdir, f"{self.label}_aspire_checkpoint.h5"
         )
+        checkpoint_every = sample_kwargs.pop("checkpoint_every", 1)
+        checkpoint_file = sample_kwargs.pop("checkpoint_file", default_checkpoint_file)
 
-        logger.info(f"Fitting aspire with kwargs: {fit_kwargs}")
-        history = pop.fit(initial_samples, **fit_kwargs)
-
-        if self.plot:
-            from aspire.plot import plot_comparison
-
-            logger.debug("Plotting loss history")
-            history.plot_loss().savefig(
-                os.path.join(self.outdir, f"{self.label}_loss.png")
+        if os.path.exists(checkpoint_file):
+            logger.info(f"Resuming from checkpoint file: {checkpoint_file}")
+            aspire = AspireSampler.resume_from_file(
+                checkpoint_file,
+                log_likelihood=log_likelihood_fn,
+                log_prior=funcs.log_prior,
             )
-            logger.debug("Plotting samples from flow")
-            flow_samples = pop.sample_flow(10_000)
-
-            fig = plot_comparison(
-                initial_samples,
-                flow_samples,
-                per_samples_kwargs=[
-                    dict(include_weights=False, color="C0"),
-                    dict(include_weights=False, color="C1"),
-                ],
-                labels=["Initial samples", "Flow samples"],
+        else:
+            logger.info(f"Creating aspire instance with kwargs: {kwargs}")
+            aspire = AspireSampler(
+                log_likelihood=log_likelihood_fn,
+                log_prior=funcs.log_prior,
+                dims=self.ndim,
+                parameters=self.search_parameter_keys,
+                prior_bounds=prior_bounds,
+                periodic_parameters=periodic_parameters,
+                **kwargs,
             )
-            fig.savefig(os.path.join(self.outdir, f"{self.label}_flow.png"))
+
+            logger.info(f"Fitting aspire with kwargs: {fit_kwargs}")
+            history = aspire.fit(initial_samples, **fit_kwargs)
+
+            if self.plot:
+                from aspire.plot import plot_comparison
+
+                logger.debug("Plotting loss history")
+                history.plot_loss().savefig(
+                    os.path.join(self.outdir, f"{self.label}_loss.png")
+                )
+                logger.debug("Plotting samples from flow")
+                flow_samples = aspire.sample_flow(10_000)
+
+                fig = plot_comparison(
+                    initial_samples,
+                    flow_samples,
+                    per_samples_kwargs=[
+                        dict(include_weights=False, color="C0"),
+                        dict(include_weights=False, color="C1"),
+                    ],
+                    labels=["Initial samples", "Flow samples"],
+                )
+                fig.savefig(os.path.join(self.outdir, f"{self.label}_flow.png"))
 
         logger.info(f"Sampling from posterior with kwargs: {sample_kwargs}")
 
         self._setup_pool()
 
-        with PoolHandler(pop, self.pool, close_pool=False):
-            samples, sampling_history = pop.sample_posterior(
+        if enable_checkpointing:
+            print("Enabling checkpointing")
+            print(f"Checkpoint file: {checkpoint_file}")
+            print(f"Checkpoint every: {checkpoint_every}")
+            checkpoint_ctx = aspire.auto_checkpoint(
+                checkpoint_file, every=checkpoint_every
+            )
+        else:
+            checkpoint_ctx = contextlib.nullcontext(aspire)
+
+        with PoolHandler(aspire, self.pool, close_pool=False), checkpoint_ctx:
+            samples, sampling_history = aspire.sample_posterior(
                 n_samples, return_history=True, **sample_kwargs
             )
             samples = samples.to_numpy()
@@ -262,7 +298,7 @@ class Aspire(Sampler):
         self.result.log_evidence = iid_samples.log_evidence or np.nan
         self.result.log_evidence_err = iid_samples.log_evidence_error or np.nan
 
-        self.result.num_likelihood_evaluations = pop.n_likelihood_evaluations
+        self.result.num_likelihood_evaluations = aspire.n_likelihood_evaluations
 
         return self.result
 
@@ -291,6 +327,7 @@ class Aspire(Sampler):
             os.path.join(outdir, f"{label}_loss.png"),
             os.path.join(outdir, f"{label}_sampling_history.png"),
             os.path.join(outdir, f"{label}_flow.png"),
+            os.path.join(outdir, f"{label}_aspire_checkpoint.h5"),
         ]
         dirs = []
         return filenames, dirs
