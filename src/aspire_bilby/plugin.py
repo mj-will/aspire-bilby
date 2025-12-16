@@ -3,13 +3,13 @@
 from functools import partial
 from typing import Callable
 import contextlib
+from pathlib import Path
 
 import bilby
 from bilby.core.utils.random import rng
 from bilby.core.utils.log import logger
 from bilby.core.sampler.base_sampler import Sampler
 import copy
-import os
 import numpy as np
 from aspire import Aspire as AspireSampler
 from aspire.samples import Samples
@@ -204,13 +204,16 @@ class Aspire(Sampler):
         kwargs.pop("pool", None)
         kwargs.pop("sampling_seed", None)
         enable_checkpointing = kwargs.pop("enable_checkpointing", True)
-        default_checkpoint_file = os.path.join(
-            self.outdir, f"{self.label}_aspire_checkpoint.h5"
+        default_checkpoint_file = (
+            Path(self.outdir) / f"{self.label}_aspire_checkpoint.h5"
         )
         checkpoint_every = sample_kwargs.pop("checkpoint_every", 1)
         checkpoint_file = sample_kwargs.pop("checkpoint_file", default_checkpoint_file)
 
-        if os.path.exists(checkpoint_file):
+        # Make sure the output directory exists
+        Path(self.outdir).mkdir(parents=True, exist_ok=True)
+
+        if checkpoint_file.exists() and enable_checkpointing:
             logger.info(f"Resuming from checkpoint file: {checkpoint_file}")
             aspire = AspireSampler.resume_from_file(
                 checkpoint_file,
@@ -237,7 +240,7 @@ class Aspire(Sampler):
 
                 logger.debug("Plotting loss history")
                 history.plot_loss().savefig(
-                    os.path.join(self.outdir, f"{self.label}_loss.png")
+                    Path(self.outdir) / f"{self.label}_loss.png"
                 )
                 logger.debug("Plotting samples from flow")
                 flow_samples = aspire.sample_flow(10_000)
@@ -251,7 +254,7 @@ class Aspire(Sampler):
                     ],
                     labels=["Initial samples", "Flow samples"],
                 )
-                fig.savefig(os.path.join(self.outdir, f"{self.label}_flow.png"))
+                fig.savefig(Path(self.outdir) / f"{self.label}_flow.png")
 
         logger.info(f"Sampling from posterior with kwargs: {sample_kwargs}")
 
@@ -277,7 +280,7 @@ class Aspire(Sampler):
 
         if self.plot and sampling_history is not None:
             sampling_history.plot().savefig(
-                os.path.join(self.outdir, f"{self.label}_sampling_history.png")
+                Path(self.outdir) / f"{self.label}_sampling_history.png"
             )
 
         if hasattr(samples, "log_w") and samples.log_w is not None:
@@ -323,11 +326,12 @@ class Aspire(Sampler):
         list
             List of directory names.
         """
+        outdir = Path(outdir)
         filenames = [
-            os.path.join(outdir, f"{label}_loss.png"),
-            os.path.join(outdir, f"{label}_sampling_history.png"),
-            os.path.join(outdir, f"{label}_flow.png"),
-            os.path.join(outdir, f"{label}_aspire_checkpoint.h5"),
+            outdir / f"{label}_loss.png",
+            outdir / f"{label}_sampling_history.png",
+            outdir / f"{label}_flow.png",
+            outdir / f"{label}_aspire_checkpoint.h5",
         ]
         dirs = []
         return filenames, dirs
