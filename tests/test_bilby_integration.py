@@ -34,20 +34,31 @@ def bilby_priors():
     return priors
 
 
+@pytest.fixture(params=["zuko", "flowjax"])
+def flow_backend(request):
+    return request.param
+
+
 @pytest.fixture()
-def sampler_kwargs():
+def sampler_kwargs(flow_backend):
+    if flow_backend == "zuko":
+        fit_kwargs = dict(
+            n_epochs=10,
+        )
+    elif flow_backend == "flowjax":
+        fit_kwargs = dict(
+            max_epochs=10,
+        )
+    else:
+        raise ValueError(f"Unknown flow backend: {flow_backend}")
     return dict(
         n_samples=100,
+        fit_kwargs=fit_kwargs,
         sample_kwargs=dict(
             sampler="smc",
             adaptive=True,
         ),
     )
-
-
-@pytest.fixture(params=["zuko", "flowjax"])
-def flow_backend(request):
-    return request.param
 
 
 @pytest.fixture(params=[None, "samples", "result"])
@@ -90,6 +101,7 @@ def test_run_sampler(
     flow_backend,
 ):
     outdir = tmp_path / "test_run_sampler"
+    outdir.mkdir(parents=True, exist_ok=True)
 
     sampler_kwargs.update(**existing_result)
 
@@ -108,10 +120,12 @@ def test_run_sampler_pool(
     bilby_priors,
     tmp_path,
     sampler_kwargs,
+    flow_backend,
 ):
     from multiprocessing.dummy import Pool
 
     outdir = tmp_path / "test_run_sampler_pool"
+    outdir.mkdir(parents=True, exist_ok=True)
 
     with patch("multiprocessing.Pool", new=Pool):
         bilby.run_sampler(
@@ -119,6 +133,7 @@ def test_run_sampler_pool(
             priors=bilby_priors,
             sampler="aspire",
             outdir=outdir,
+            flow_backend=flow_backend,
             npool=2,
             **sampler_kwargs,
         )
