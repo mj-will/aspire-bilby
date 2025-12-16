@@ -34,7 +34,7 @@ jax = [
     "aspire-inference[jax]",
 ]
 minipcn = [
-    "minipcn",
+    "minipcn[array-api]>=0.2.0a3",
 ]
 
 [tool.setuptools_scm]
