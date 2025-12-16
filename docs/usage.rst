@@ -97,6 +97,21 @@ into aspire-friendly functions and sample sets.
     history = aspire.fit(initial_samples)
 
 
+Checkpointing and Resuming
+--------------------------
+
+``aspire`` supports checkpointing during sampling once the flow is trained.
+Checkpoints are stored in HDF5 files and can be used to resume sampling later.
+In the ``billy`` integration, checkpoints are saved to
+``<outdir>/<label>_aspire_checkpoint.h5`` by default if checkpointing is enabled
+(via the ``enable_checkpointing`` keyword argument).
+
+.. note::
+
+    If the result file already exists and contains a checkpoint, sampling will
+    resume from that checkpoint automatically. If you want to always start fresh,
+    delete or rename the existing checkpoint file first.
+
 Usage in bilby_pipe
 -------------------
 
