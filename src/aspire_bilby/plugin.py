@@ -213,7 +213,11 @@ class Aspire(Sampler):
         # Make sure the output directory exists
         Path(self.outdir).mkdir(parents=True, exist_ok=True)
 
-        if checkpoint_file.exists() and enable_checkpointing:
+        if (
+            checkpoint_file.exists()
+            and checkpoint_file.stat().st_size > 0
+            and enable_checkpointing
+        ):
             logger.info(f"Resuming from checkpoint file: {checkpoint_file}")
             aspire = AspireSampler.resume_from_file(
                 checkpoint_file,
@@ -261,9 +265,9 @@ class Aspire(Sampler):
         self._setup_pool()
 
         if enable_checkpointing:
-            print("Enabling checkpointing")
-            print(f"Checkpoint file: {checkpoint_file}")
-            print(f"Checkpoint every: {checkpoint_every}")
+            logger.info(
+                f"Enabling checkpointing with checkpoint file '{checkpoint_file}' every {checkpoint_every} iterations."
+            )
             checkpoint_ctx = aspire.auto_checkpoint(
                 checkpoint_file, every=checkpoint_every
             )
@@ -328,10 +332,10 @@ class Aspire(Sampler):
         """
         outdir = Path(outdir)
         filenames = [
-            outdir / f"{label}_loss.png",
-            outdir / f"{label}_sampling_history.png",
-            outdir / f"{label}_flow.png",
-            outdir / f"{label}_aspire_checkpoint.h5",
+            str(outdir / f"{label}_loss.png"),
+            str(outdir / f"{label}_sampling_history.png"),
+            str(outdir / f"{label}_flow.png"),
+            str(outdir / f"{label}_aspire_checkpoint.h5"),
         ]
         dirs = []
         return filenames, dirs
@@ -347,7 +351,7 @@ class Aspire(Sampler):
             if user_input not in args:
                 logger.debug(
                     (
-                        "Supplied argument '{user_input}' is not a default "
+                        f"Supplied argument '{user_input}' is not a default "
                         f"argument of '{self.__class__.__name__}'. "
                     )
                 )
