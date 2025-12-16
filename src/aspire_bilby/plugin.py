@@ -328,10 +328,10 @@ class Aspire(Sampler):
         """
         outdir = Path(outdir)
         filenames = [
-            outdir / f"{label}_loss.png",
-            outdir / f"{label}_sampling_history.png",
-            outdir / f"{label}_flow.png",
-            outdir / f"{label}_aspire_checkpoint.h5",
+            str(outdir / f"{label}_loss.png"),
+            str(outdir / f"{label}_sampling_history.png"),
+            str(outdir / f"{label}_flow.png"),
+            str(outdir / f"{label}_aspire_checkpoint.h5"),
         ]
         dirs = []
         return filenames, dirs
