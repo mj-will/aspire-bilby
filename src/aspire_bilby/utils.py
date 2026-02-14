@@ -161,6 +161,7 @@ def samples_from_bilby_result(
 
     if parameters is None:
         parameters = result.priors.non_fixed_keys
+        samples = result.posterior[parameters].to_numpy()
     elif (
         missing_parameters := set(parameters) - set(available_parameters)
         or sample_from_prior
