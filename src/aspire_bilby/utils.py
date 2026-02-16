@@ -184,8 +184,7 @@ def samples_from_bilby_result(
             )
     else:
         samples_df = result.posterior
-    
-    
+
     return Samples(
         x=samples_df[parameters].to_numpy(copy=True),
         parameters=parameters,
