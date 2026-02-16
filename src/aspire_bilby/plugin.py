@@ -6,7 +6,7 @@ import contextlib
 from pathlib import Path
 
 import bilby
-from bilby.core.utils.random import rng
+from bilby.core.utils import random
 from bilby.core.utils.log import logger
 from bilby.core.sampler.base_sampler import Sampler
 import copy
@@ -288,7 +288,7 @@ class Aspire(Sampler):
             )
 
         if hasattr(samples, "log_w") and samples.log_w is not None:
-            iid_samples = samples.rejection_sample(rng=rng)
+            iid_samples = samples.rejection_sample(rng=random.rng)
         else:
             iid_samples = samples
 
