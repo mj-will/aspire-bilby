@@ -161,8 +161,8 @@ def samples_from_bilby_result(
 
     if parameters is None:
         parameters = result.priors.non_fixed_keys
-        samples = result.posterior[parameters].to_numpy()
-    elif (
+
+    if (
         missing_parameters := set(parameters) - set(available_parameters)
         or sample_from_prior
     ):
@@ -177,16 +177,17 @@ def samples_from_bilby_result(
             # Check all parameters are present
             if not all(p in samples_df for p in parameters):
                 raise ValueError("Not all parameters are present in the result.")
-            samples = samples_df[parameters].to_numpy(copy=True)
         else:
             raise RuntimeError(
                 "Initial result does not contain all parameters and new priors "
                 f"were not provided. Missing parameters: {missing_parameters}."
             )
     else:
-        samples = result.posterior[parameters].to_numpy(copy=True)
+        samples_df = result.posterior
+    
+    
     return Samples(
-        x=samples,
+        x=samples_df[parameters].to_numpy(),
         parameters=parameters,
     )
 
