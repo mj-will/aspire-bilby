@@ -177,14 +177,14 @@ def samples_from_bilby_result(
             # Check all parameters are present
             if not all(p in samples_df for p in parameters):
                 raise ValueError("Not all parameters are present in the result.")
-            samples = samples_df[parameters].to_numpy()
+            samples = samples_df[parameters].to_numpy(copy=True)
         else:
             raise RuntimeError(
                 "Initial result does not contain all parameters and new priors "
                 f"were not provided. Missing parameters: {missing_parameters}."
             )
     else:
-        samples = result.posterior[parameters].to_numpy()
+        samples = result.posterior[parameters].to_numpy(copy=True)
     return Samples(
         x=samples,
         parameters=parameters,

@@ -294,7 +294,8 @@ class Aspire(Sampler):
 
         self.result.samples = iid_samples.x
 
-        self.result.nested_samples = samples.to_dataframe(flat=True)
+        # Only include the samples in the initial dataframe
+        self.result.nested_samples = samples.to_dataframe(include=[])
         self.result.nested_samples["log_likelihood"] = samples.log_likelihood
         self.result.nested_samples["log_prior"] = samples.log_prior
         if hasattr(samples, "weights") and samples.weights is not None:
