@@ -1,6 +1,5 @@
 from copy import deepcopy
 from typing import TYPE_CHECKING, Callable
-from warnings import warn
 
 from bilby.core.likelihood import Likelihood
 from bilby.core.prior import PriorDict
@@ -54,22 +53,22 @@ _global_functions = GlobalFunctions(None, None, [], False)
 def update_global_functions(
     bilby_likelihood: Likelihood,
     bilby_priors: PriorDict,
-    parameters: dict[str, float],
-    sampling_keys: list[str],
+    fixed_parameters: dict[str, float],
+    parameters: list[str],
     use_ratio: bool,
 ):
     """Update the global functions for log likelihood and log prior."""
     global _global_functions
     _global_functions.bilby_likelihood = bilby_likelihood
     _global_functions.bilby_priors = bilby_priors
+    _global_functions.fixed_parameters = fixed_parameters
     _global_functions.parameters = parameters
-    _global_functions.sampling_keys = sampling_keys
     _global_functions.use_ratio = use_ratio
 
 
 def _global_log_likelihood(x):
-    theta = _global_functions.parameters.copy()
-    new_theta = dict(zip(_global_functions.sampling_keys, x))
+    theta = _global_functions.fixed_parameters.copy()
+    new_theta = dict(zip(_global_functions.parameters, x))
     theta.update(new_theta)
     if _global_functions.use_ratio:
         return _global_functions.bilby_likelihood.log_likelihood_ratio(theta)
@@ -77,32 +76,29 @@ def _global_log_likelihood(x):
         return _global_functions.bilby_likelihood.log_likelihood(theta)
 
 
-def _initialize_parameters(bilby_priors) -> tuple[dict[str, float], list[str]]:
+def _initialize_fixed_parameters(bilby_priors) -> dict[str, float]:
     import bilby
 
-    parameters = {}
-    sampling_keys = []
+    fixed_parameters = {}
     for key in bilby_priors.keys():
         if (
             isinstance(bilby_priors[key], bilby.core.prior.Prior)
             and not bilby_priors[key].is_fixed
-        ):
-            sampling_keys.append(key)
-        elif isinstance(bilby_priors[key], bilby.core.prior.Constraint):
-            pass
+        ) or isinstance(bilby_priors[key], bilby.core.prior.Constraint):
+            continue
         elif isinstance(bilby_priors[key], bilby.core.prior.DeltaFunction):
-            parameters[key] = bilby_priors[key].peak
+            fixed_parameters[key] = bilby_priors[key].peak
         else:
             raise ValueError(
                 f"Unsupported prior type for key {key}: {type(bilby_priors[key])}"
             )
-    return parameters, sampling_keys
+    return fixed_parameters
 
 
 def get_aspire_functions(
     bilby_likelihood: Likelihood,
     bilby_priors: PriorDict,
-    parameters: list[str] = None,
+    parameters: list[str],
     use_ratio: bool = False,
     likelihood_dtype: str = "float64",
 ):
@@ -114,25 +110,22 @@ def get_aspire_functions(
         The bilby likelihood object.
     bilby_priors : PriorDict
         The bilby prior object.
+    parameters : list[str]
+        The parameters to evaluate the log likelihood and log prior for.
+        The order should match the order of the parameters in the aspire sampler.
     use_ratio : bool
         Whether to use the log likelihood ratio function if available. If False,
         the log likelihood function is used instead.
     likelihood_dtype : str
         The dtype to use for the log likelihood values. Default is "float64".
     """
-    if parameters is not None:
-        warn(
-            "The `parameters` argument is deprecated and will be removed in a future version. "
-            "The parameters will be inferred from the priors.",
-            FutureWarning,
-        )
-    parameters, sampling_keys = _initialize_parameters(bilby_priors)
+    fixed_parameters = _initialize_fixed_parameters(bilby_priors)
 
     update_global_functions(
         bilby_likelihood,
         bilby_priors,
         parameters=parameters,
-        sampling_keys=sampling_keys,
+        fixed_parameters=fixed_parameters,
         use_ratio=use_ratio,
     )
 
@@ -150,7 +143,7 @@ def get_aspire_functions(
         return logl
 
     def log_prior(samples):
-        x = dict(zip(sampling_keys, np.array(samples.x).T))
+        x = dict(zip(parameters, np.array(samples.x).T))
         return bilby_priors.ln_prob(x, axis=0)
 
     return Functions(log_likelihood=log_likelihood, log_prior=log_prior)
