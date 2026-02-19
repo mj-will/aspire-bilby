@@ -11,11 +11,16 @@ import pandas as pd
 
 
 def test_get_aspire_functions(bilby_likelihood, bilby_priors):
-    functions = get_aspire_functions(bilby_likelihood, bilby_priors, use_ratio=False)
+    # Intentional switching of order to test that the order of parameters is correctly handled
+    parameters = ["c", "m"]
+    functions = get_aspire_functions(
+        bilby_likelihood, bilby_priors, parameters=parameters, use_ratio=False
+    )
 
+    theta = bilby_priors.sample(10)
     samples = Samples(
-        np.array([x for x in bilby_priors.sample(10).values()]).T,
-        parameters=list(bilby_priors.non_fixed_keys),
+        np.array([theta[p] for p in parameters]).T,
+        parameters=parameters,
     )
     logp = functions.log_prior(samples)
     samples.log_prior = logp
