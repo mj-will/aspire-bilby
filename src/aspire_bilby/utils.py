@@ -71,9 +71,17 @@ def _global_log_likelihood(x):
     new_theta = dict(zip(_global_functions.parameters, x))
     theta.update(new_theta)
     if _global_functions.use_ratio:
-        return _global_functions.bilby_likelihood.log_likelihood_ratio(theta)
+        try:
+            return _global_functions.bilby_likelihood.log_likelihood_ratio(theta)
+        except TypeError:
+            _global_functions.bilby_likelihood.parameters.update(theta)
+            return _global_functions.bilby_likelihood.log_likelihood()
     else:
-        return _global_functions.bilby_likelihood.log_likelihood(theta)
+        try:
+            return _global_functions.bilby_likelihood.log_likelihood(theta)
+        except TypeError:
+            _global_functions.bilby_likelihood.parameters.update(theta)
+            return _global_functions.bilby_likelihood.log_likelihood()
 
 
 def _initialize_fixed_parameters(bilby_priors) -> dict[str, float]:
