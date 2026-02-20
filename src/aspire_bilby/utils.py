@@ -1,5 +1,5 @@
 from copy import deepcopy
-from typing import Callable
+from typing import TYPE_CHECKING, Callable
 
 from bilby.core.likelihood import Likelihood
 from bilby.core.prior import PriorDict
@@ -14,6 +14,10 @@ import pandas as pd
 import re
 
 from bilby.core.utils.log import logger
+
+if TYPE_CHECKING:
+    from bilby.core.likelihood import Likelihood
+    from bilby.core.prior import PriorDict
 
 
 Inputs = namedtuple(
@@ -49,6 +53,7 @@ _global_functions = GlobalFunctions(None, None, [], False)
 def update_global_functions(
     bilby_likelihood: Likelihood,
     bilby_priors: PriorDict,
+    fixed_parameters: dict[str, float],
     parameters: list[str],
     use_ratio: bool,
 ):
@@ -56,30 +61,81 @@ def update_global_functions(
     global _global_functions
     _global_functions.bilby_likelihood = bilby_likelihood
     _global_functions.bilby_priors = bilby_priors
+    _global_functions.fixed_parameters = fixed_parameters
     _global_functions.parameters = parameters
     _global_functions.use_ratio = use_ratio
 
 
 def _global_log_likelihood(x):
-    theta = dict(zip(_global_functions.parameters, x))
-    _global_functions.bilby_likelihood.parameters.update(theta)
-
+    theta = _global_functions.fixed_parameters.copy()
+    new_theta = dict(zip(_global_functions.parameters, x))
+    theta.update(new_theta)
     if _global_functions.use_ratio:
-        return _global_functions.bilby_likelihood.log_likelihood_ratio()
+        try:
+            return _global_functions.bilby_likelihood.log_likelihood_ratio(theta)
+        except TypeError:
+            _global_functions.bilby_likelihood.parameters.update(theta)
+            return _global_functions.bilby_likelihood.log_likelihood()
     else:
-        return _global_functions.bilby_likelihood.log_likelihood()
+        try:
+            return _global_functions.bilby_likelihood.log_likelihood(theta)
+        except TypeError:
+            _global_functions.bilby_likelihood.parameters.update(theta)
+            return _global_functions.bilby_likelihood.log_likelihood()
+
+
+def _initialize_fixed_parameters(bilby_priors) -> dict[str, float]:
+    import bilby
+
+    fixed_parameters = {}
+    for key in bilby_priors.keys():
+        if (
+            isinstance(bilby_priors[key], bilby.core.prior.Prior)
+            and not bilby_priors[key].is_fixed
+        ) or isinstance(bilby_priors[key], bilby.core.prior.Constraint):
+            continue
+        elif isinstance(bilby_priors[key], bilby.core.prior.DeltaFunction):
+            fixed_parameters[key] = bilby_priors[key].peak
+        else:
+            raise ValueError(
+                f"Unsupported prior type for key {key}: {type(bilby_priors[key])}"
+            )
+    return fixed_parameters
 
 
 def get_aspire_functions(
-    bilby_likelihood,
-    bilby_priors,
-    parameters,
+    bilby_likelihood: Likelihood,
+    bilby_priors: PriorDict,
+    parameters: list[str],
     use_ratio: bool = False,
     likelihood_dtype: str = "float64",
 ):
-    """Get the log likelihood function for a bilby likelihood object."""
+    """Get the log likelihood function for a bilby likelihood object.
 
-    update_global_functions(bilby_likelihood, bilby_priors, parameters, use_ratio)
+    Parameters
+    ----------
+    bilby_likelihood : Likelihood
+        The bilby likelihood object.
+    bilby_priors : PriorDict
+        The bilby prior object.
+    parameters : list[str]
+        The parameters to evaluate the log likelihood and log prior for.
+        The order should match the order of the parameters in the aspire sampler.
+    use_ratio : bool
+        Whether to use the log likelihood ratio function if available. If False,
+        the log likelihood function is used instead.
+    likelihood_dtype : str
+        The dtype to use for the log likelihood values. Default is "float64".
+    """
+    fixed_parameters = _initialize_fixed_parameters(bilby_priors)
+
+    update_global_functions(
+        bilby_likelihood,
+        bilby_priors,
+        parameters=parameters,
+        fixed_parameters=fixed_parameters,
+        use_ratio=use_ratio,
+    )
 
     def log_likelihood(samples, map_fn=map):
         logl = -np.inf * np.ones(len(samples.x))
@@ -103,7 +159,7 @@ def get_aspire_functions(
 
 def get_prior_bounds(
     bilby_priors: PriorDict, parameters: list[str]
-) -> dict[str : np.ndarray]:
+) -> dict[str, np.ndarray]:
     """Get a dictionary of prior bounds."""
     return {
         p: np.array([bilby_priors[p].minimum, bilby_priors[p].maximum])
@@ -241,7 +297,7 @@ def sample_missing_parameters(
 
     Returns
     -------
-    numpy.ndarray
+    pd.DataFrame
         The samples from the bilby result and the missing parameters from the bilby priors.
         The order will be the same as :code:`parameters`.
     """
@@ -364,9 +420,7 @@ def get_inputs_from_bilby_pipe_ini(
         config_file, data_dump_file, suppress_bilby_logger=suppress_bilby_logger
     )
     parameters = bilby_priors.non_fixed_keys
-    funcs = get_aspire_functions(
-        bilby_likelihood, bilby_priors, parameters, use_ratio=use_ratio
-    )
+    funcs = get_aspire_functions(bilby_likelihood, bilby_priors, use_ratio=use_ratio)
     return Inputs(
         log_likelihood=funcs.log_likelihood,
         log_prior=funcs.log_prior,

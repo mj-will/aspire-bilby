@@ -179,7 +179,7 @@ class Aspire(Sampler):
         funcs = get_aspire_functions(
             self.likelihood,
             self.priors,
-            self.search_parameter_keys,
+            parameters=self.search_parameter_keys,
             use_ratio=self.use_ratio,
         )
 
