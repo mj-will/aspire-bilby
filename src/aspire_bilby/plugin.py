@@ -294,17 +294,27 @@ class Aspire(Sampler):
 
         self.result.samples = iid_samples.x
 
-        # Only include the samples in the initial dataframe
-        self.result.nested_samples = samples.to_dataframe(include=[])
-        self.result.nested_samples["log_likelihood"] = samples.log_likelihood
-        self.result.nested_samples["log_prior"] = samples.log_prior
-        if hasattr(samples, "weights") and samples.weights is not None:
-            self.result.nested_samples["weights"] = samples.weights
+        # Only 'nested samples' if samples have weights:
+
+        if hasattr(samples, "log_w") and samples.log_w is not None:
+            # If weights are all the same, set them to None to avoid confusion
+            # Only include the samples in the initial dataframe
+            self.result.nested_samples = samples.to_dataframe(include=[])
+            self.result.nested_samples["log_likelihood"] = samples.log_likelihood
+            self.result.nested_samples["log_prior"] = samples.log_prior
+            if hasattr(samples, "weights") and samples.weights is not None:
+                self.result.nested_samples["weights"] = samples.weights
 
         self.result.log_likelihood_evaluations = iid_samples.log_likelihood
         self.result.log_prior_evaluations = iid_samples.log_prior
-        self.result.log_evidence = iid_samples.log_evidence or np.nan
-        self.result.log_evidence_err = iid_samples.log_evidence_error or np.nan
+        if hasattr(samples, "log_evidence"):
+            self.result.log_evidence = iid_samples.log_evidence or np.nan
+        else:
+            self.result.log_evidence = np.nan
+        if hasattr(samples, "log_evidence_error"):
+            self.result.log_evidence_err = iid_samples.log_evidence_error or np.nan
+        else:
+            self.result.log_evidence_err = np.nan
 
         self.result.num_likelihood_evaluations = aspire.n_likelihood_evaluations
 
