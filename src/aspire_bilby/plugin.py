@@ -318,6 +318,12 @@ class Aspire(Sampler):
 
         self.result.num_likelihood_evaluations = aspire.n_likelihood_evaluations
 
+        if self.kwargs.get("initial_samples") is not None:
+            logger.debug("Encoding initial samples for hdf5")
+            self.kwargs["initial_samples"] = self.kwargs[
+                "initial_samples"
+            ]._encode_for_hdf5(flat=False)
+
         return self.result
 
     @classmethod
