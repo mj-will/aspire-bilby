@@ -56,7 +56,9 @@ def main():
         sample_kwargs=dict(
             sampler="smc",  # Use the SMC sampler
             target_efficiency=0.8,  # Target an efficiency of 0.8 for the SMC sampler
-            n_steps=20,  # Number of MCMC steps
+            sampler_kwargs=dict(
+                n_steps=20,  # Number of MCMC steps
+            ),
         ),
     )
 
