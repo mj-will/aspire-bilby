@@ -163,6 +163,15 @@ class Aspire(Sampler):
                 logger.warning(
                     "Conversion function is ignored when initial samples are provided."
                 )
+            if initial_samples.parameters is None:
+                logger.warning(
+                    "Initial samples do not have parameters defined. Assuming they are in the same order as the search parameters."
+                )
+            elif initial_samples.parameters != self.search_parameter_keys:
+                raise ValueError(
+                    "The parameters of the provided initial samples do not match the search parameters."
+                    f"Expected {self.search_parameter_keys}, got {initial_samples.parameters}."
+                )
         else:
             logger.info("Initial samples will be drawn from the prior.")
             initial_samples = samples_from_bilby_priors(
